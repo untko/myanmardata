@@ -15,7 +15,8 @@ on:
     paths:
       - ".github/workflows/**"
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   zizmor:
