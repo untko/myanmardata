@@ -2,3 +2,4 @@ name: Workflow security analysis
 
 on:
   push:
+
