@@ -1,6 +1,6 @@
 # myanmardata
 
-project about myanmar data collection and analysis
+Collectors for hard-to-get Myanmar market data.
 
 ## Getting started
 

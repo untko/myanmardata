@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "myanmardata"
 version = "0.1.0"
-description = "project about myanmar data collection and analysis"
+description = "Collectors for hard-to-get Myanmar market data: cash exchange rates, gold, fuel and agricultural prices"
 readme = "README.md"
 authors = [
   {name = "untko", email = "antkey.ko@gmail.com"}
