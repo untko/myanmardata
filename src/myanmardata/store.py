@@ -6,7 +6,9 @@ Layout under a data root::
     <root>/<source>/raw/YYYY/YYYY-MM-DDTHH-MM-SSZ.<ext>.gz    response as received
 
 Snapshots are never rewritten. A batch whose rows match the latest snapshot (ignoring
-``collected_at``) is skipped, so unchanged sources produce no files and no commits.
+``collected_at``) is skipped, so a source that publishes update times produces no files
+and no commits until it changes. Sources without update times use the collection time
+as ``observed_at``, so every run is kept as evidence that the rate was still on offer.
 """
 
 from __future__ import annotations

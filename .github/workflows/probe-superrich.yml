@@ -23,20 +23,11 @@ jobs:
 
       - name: Collect live
         run: |
-          uv run myanmardata collect superrich_th --out out
-          f=$(ls out/superrich_th/snapshots/*/*.csv)
-          wc -l "$f"
-          grep -E ',(USD|MMK|CNY),' "$f"
-          uv run myanmardata collect superrich_th --out out
-
-      - name: Look for timestamps in the page payload
-        run: |
-          curl -sS -m 30 -A 'Mozilla/5.0' https://www.superrichthailand.com/exchange-rate \
-            | grep -oiE '.{0,80}(updat|lastUpdate|dateTime|asOf|effective)[^,]{0,80}' | head -20 || true
-
-      - name: Probe SuperRich 1965 JSON
-        run: |
-          for q in 'method=1' 'method=3&value=33'; do
-            echo "== $q"
-            curl -sS -m 30 -A 'Mozilla/5.0' "https://www.superrich.co.th/controllers/currency.php?$q" | head -c 3000; echo
+          uv run myanmardata sources
+          uv run myanmardata collect superrich_th superrich_1965 --out out
+          for f in out/*/snapshots/*/*.csv; do
+            echo "== $f ($(($(wc -l < "$f") - 1)) rows)"
+            grep -E ',(USD|MMK|CNY),' "$f" | cut -d, -f1-12
           done
+          # superrich_1965 publishes update times, so an immediate rerun should be skipped.
+          uv run myanmardata collect superrich_1965 --out out

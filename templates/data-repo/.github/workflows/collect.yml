@@ -1,0 +1,47 @@
+# Daily collection for a myanmardata data repository (e.g. myanmar-fx-data).
+# Copy to .github/workflows/collect.yml and set COLLECTORS below.
+name: Collect
+
+on:
+  schedule:
+    # 03:41 UTC = 10:41 Bangkok / 10:11 Yangon. Off the hour to avoid queue delays.
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+env:
+  COLLECTORS: superrich_th
+  # Pin to a tag or commit once released; a branch keeps collectors current.
+  MYANMARDATA: git+https://github.com/untko/myanmardata@main
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+
+      - name: Collect
+        # Collectors run independently; a failure is reported after the others are saved.
+        run: uvx --from "$MYANMARDATA" myanmardata collect $COLLECTORS --out data
+
+      - name: Commit new snapshots
+        if: ${{ !cancelled() }}
+        run: |
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No new snapshots."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "data: snapshots $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
