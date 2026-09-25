@@ -1,4 +1,4 @@
-# Temporary: inspect SuperRich endpoints from a GitHub-hosted runner.
+# Temporary: run the SuperRich collector live from a GitHub-hosted runner.
 name: Probe SuperRich
 
 on:
@@ -8,44 +8,35 @@ on:
     paths:
       - ".github/workflows/probe-superrich.yml"
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe endpoints
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+
+      - name: Collect live
         run: |
-          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36'
-          curl -sS -m 30 -L -A "$UA" https://www.superrichthailand.com/exchange-rate -o green.html
-          curl -sS -m 30 -L -A "$UA" https://www.superrich.co.th/currency_rate.php -o orange.html
-          python3 - <<'PY'
-          import re, html
-          g = open("green.html", encoding="utf-8", errors="replace").read()
-          print("=== GREEN: USD contexts")
-          for m in list(re.finditer(r"USD", g))[:12]:
-              print(repr(g[max(0, m.start()-300): m.end()+500]))
-              print("---")
-          print("=== GREEN: MMK contexts")
-          for m in list(re.finditer(r"MMK", g))[:4]:
-              print(repr(g[max(0, m.start()-300): m.end()+400]))
-              print("---")
-          print("=== GREEN: api/fetch urls")
-          for u in sorted(set(re.findall(r"https?://[a-zA-Z0-9./_-]*api[a-zA-Z0-9./_?=&-]*", g)))[:40]:
-              print(u)
-          text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", g, flags=re.S)
-          text = html.unescape(re.sub(r"<[^>]+>", " ", text))
-          text = re.sub(r"\s+", " ", text)
-          print("=== GREEN: visible text")
-          print(text[:6000])
-          o = open("orange.html", encoding="utf-8", errors="replace").read()
-          print("=== ORANGE: scripts and ajax")
-          for m in re.finditer(r"(\$\.(ajax|get|post)\(|url\s*:|fetch\(|\.php)", o):
-              print(repr(o[max(0, m.start()-150): m.end()+250]))
-          text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", o, flags=re.S)
-          text = html.unescape(re.sub(r"<[^>]+>", " ", text))
-          print("=== ORANGE: visible text")
-          print(re.sub(r"\s+", " ", text)[:4000])
-          PY
-          echo "=== orange grobal.js"
-          curl -sS -m 30 -A "$UA" https://www.superrich.co.th/common/js/grobal.js | head -c 3000
+          uv run myanmardata collect superrich_th --out out
+          f=$(ls out/superrich_th/snapshots/*/*.csv)
+          wc -l "$f"
+          grep -E ',(USD|MMK|CNY),' "$f"
+          uv run myanmardata collect superrich_th --out out
+
+      - name: Look for timestamps in the page payload
+        run: |
+          curl -sS -m 30 -A 'Mozilla/5.0' https://www.superrichthailand.com/exchange-rate \
+            | grep -oiE '.{0,80}(updat|lastUpdate|dateTime|asOf|effective)[^,]{0,80}' | head -20 || true
+
+      - name: Probe SuperRich 1965 JSON
+        run: |
+          for q in 'method=1' 'method=3&value=33'; do
+            echo "== $q"
+            curl -sS -m 30 -A 'Mozilla/5.0' "https://www.superrich.co.th/controllers/currency.php?$q" | head -c 3000; echo
+          done

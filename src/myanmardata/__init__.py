@@ -1,1 +1,1 @@
-"""Top-level package for myanmardata."""
+"""Collectors and append-only snapshot storage for Myanmar market data."""
