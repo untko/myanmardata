@@ -88,6 +88,7 @@ def parse(exchange_list: dict[str, list[dict[str, Any]]], collected_at: datetime
                         quote_currency="THB",
                         unit_amount="1",
                         denomination=" ".join(str(row.get("denomRem") or "").split()),
+                        min_amount="",
                         channel="cash",
                         buy=_decimal_text(row.get("buyText", "")),
                         sell=_decimal_text(row.get("sellText", "")),

@@ -5,6 +5,9 @@ Layout under a data root::
     <root>/<source>/snapshots/YYYY/YYYY-MM-DDTHH-MM-SSZ.csv   canonical parsed rows
     <root>/<source>/raw/YYYY/YYYY-MM-DDTHH-MM-SSZ.<ext>.gz    response as received
 
+Imports of overlapping history (``only_new=True``) keep only observations not already stored,
+identified by the record's series key plus ``observed_at``.
+
 Snapshots are never rewritten. A batch whose rows match the latest snapshot (ignoring
 ``collected_at``) is skipped, so a source that publishes update times produces no files
 and no commits until it changes. Sources without update times use the collection time
@@ -47,12 +50,18 @@ class SnapshotStore:
     def snapshots(self, source: str) -> list[Path]:
         return sorted(self.snapshot_dir(source).glob("*/*.csv"))
 
+    def _read(self, path: Path) -> list[dict[str, str]]:
+        with path.open(newline="", encoding="utf-8") as handle:
+            return list(csv.DictReader(handle))
+
+    def observation_keys(self, source: str, key: tuple[str, ...]) -> set[tuple[str, ...]]:
+        """Every stored (series key + ``observed_at``) for ``source``."""
+        fields = (*key, "observed_at")
+        return {tuple(row.get(f, "") for f in fields) for path in self.snapshots(source) for row in self._read(path)}
+
     def latest_rows(self, source: str) -> list[dict[str, str]] | None:
         existing = self.snapshots(source)
-        if not existing:
-            return None
-        with existing[-1].open(newline="", encoding="utf-8") as handle:
-            return list(csv.DictReader(handle))
+        return self._read(existing[-1]) if existing else None
 
     def write(
         self,
@@ -61,6 +70,7 @@ class SnapshotStore:
         collected_at: datetime,
         raw: bytes | None = None,
         raw_ext: str = "json",
+        only_new: bool = False,
     ) -> WriteResult:
         if not records:
             raise RecordError(f"{source}: refusing to write an empty snapshot")
@@ -70,9 +80,16 @@ class SnapshotStore:
         if any(r.source != source for r in records):
             raise RecordError(f"{source}: every record must carry source={source!r}")
 
-        columns = type(records[0]).columns()
+        record_type = type(records[0])
+        columns = record_type.columns()
         rows = [r.as_row() for r in records]
-        if self._unchanged(source, rows):
+        if only_new:
+            fields = (*record_type.series_key, "observed_at")
+            known = self.observation_keys(source, record_type.series_key)
+            rows = [r for r in rows if tuple(r[f] for f in fields) not in known]
+            if not rows:
+                return WriteResult(snapshot=None, raw=None, rows=0, skipped_unchanged=True)
+        elif self._unchanged(source, rows):
             return WriteResult(snapshot=None, raw=None, rows=len(rows), skipped_unchanged=True)
 
         stamp = _stamp(collected_at)

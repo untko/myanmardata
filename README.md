@@ -30,12 +30,39 @@ A copy-ready workflow for a data repository is in
 | name | domain | what |
 |---|---|---|
 | `superrich_th` | fx | SuperRich Thailand (green), cash buy/sell in THB per denomination, incl. USD, CNY, MMK |
-| `superrich_1965` | fx | SuperRich 1965 (orange), cash buy/sell in THB per denomination, with per-rate update times |
 
 ```sh
 myanmardata sources
-myanmardata collect superrich_th superrich_1965 --out data
+myanmardata collect superrich_th --out data
 ```
+
+## Chat channels (Viber)
+
+Local kyat rates are mostly posted in Viber channels, which have no public web view. Import a
+channel's history from Viber Desktop's local database:
+
+1. In Viber Desktop, open the channel and scroll up to the oldest post you want; only loaded
+   posts are in the database.
+2. Quit Viber (or copy the file) and locate `viber.db`:
+   Windows `%APPDATA%\ViberPC\<phone>\viber.db`, macOS `~/Library/Application Support/ViberPC/<phone>/viber.db`.
+3. Run:
+
+```sh
+myanmardata viber chats viber.db                                   # find the channel's name
+myanmardata import baht_kyat --viber-db viber.db --dry-run         # check what parses
+myanmardata import baht_kyat --viber-db viber.db --out data        # write new observations
+```
+
+Re-running on a newer copy only adds posts not already stored. If `viber chats` fails, run
+`myanmardata viber tables viber.db`: Viber's schema is undocumented and may differ by version.
+
+Without database access, paste posts into a text file and use `--text posts.txt`, either with an
+`@ 2026-09-25 10:11` line (Myanmar time by default) before each post, or relying on each post's
+`Update - 25 Sep` header with `--last-year 2026`.
+
+| channel | parser | what |
+|---|---|---|
+| Baht-Kyat (Viber) | `baht_kyat` | THB→MMK buy/sell by deal size (≥ ฿10,000 / ≥ ฿100,000), Thai bank account transfers |
 
 ## Data layout and rules
 
@@ -44,10 +71,11 @@ data/<source>/snapshots/YYYY/YYYY-MM-DDTHH-MM-SSZ.csv   parsed rows, never rewri
 data/<source>/raw/YYYY/YYYY-MM-DDTHH-MM-SSZ.json.gz     the payload those rows came from
 ```
 
-* Every row carries its `source`, `venue`, `method` (`api`, `html`, `ocr`, `manual`),
+* Every row carries its `source`, `venue`, `method` (`api`, `html`, `chat`, `ocr`, `manual`),
   `observed_at` (when the price applies), `collected_at` (when it was fetched) and `source_url`.
 * Values stay as published: prices are decimal strings, and denominations keep the source's spelling.
-* FX series are identified by source, venue, currency pair, unit amount, denomination and channel.
+* FX series are identified by source, venue, currency pair, unit amount, denomination, minimum
+  deal size and channel (cash, Thai bank account, ...).
   Different note sizes get different rates; never average across them.
 * A batch identical to the latest snapshot is skipped. Sources without their own update time use
   the collection time as `observed_at`, so each run is kept.

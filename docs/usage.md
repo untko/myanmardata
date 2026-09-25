@@ -9,10 +9,17 @@ myanmardata sources
 Collect one or more sources into a data directory:
 
 ```sh
-myanmardata collect superrich_th superrich_1965 --out data
+myanmardata collect superrich_th --out data
 ```
 
 Use `--dry-run` to fetch and parse without writing anything.
+
+Import a Viber channel's history from Viber Desktop's `viber.db` (see the README for where it lives):
+
+```sh
+myanmardata viber chats viber.db
+myanmardata import baht_kyat --viber-db viber.db --out data
+```
 
 From Python:
 

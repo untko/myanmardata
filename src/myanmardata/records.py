@@ -12,8 +12,10 @@ from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 from typing import ClassVar, Literal
 
-Method = Literal["api", "html", "ocr", "manual"]
-METHODS: frozenset[str] = frozenset({"api", "html", "ocr", "manual"})
+# api/html: fetched from a website; chat: parsed from a channel post; ocr: read from an image;
+# manual: typed in by a person.
+Method = Literal["api", "html", "chat", "ocr", "manual"]
+METHODS: frozenset[str] = frozenset({"api", "html", "chat", "ocr", "manual"})
 
 _DECIMAL = re.compile(r"^(?:[0-9]+(?:\.[0-9]+)?)?$")
 _CURRENCY = re.compile(r"^[A-Z]{3,5}$")
@@ -49,8 +51,10 @@ class FxQuote:
     """One published buy/sell quote for exchanging ``base_currency`` into ``quote_currency``.
 
     ``buy`` is what the venue pays for ``unit_amount`` of ``base_currency`` and ``sell`` is what it
-    charges, both in ``quote_currency``. Rates for different denominations, note conditions or
-    channels are different series and must never be averaged together.
+    charges, both in ``quote_currency``. ``denomination`` is the note size for cash quotes and
+    ``min_amount`` the smallest deal (in ``base_currency``) a tiered quote applies to; either may be
+    empty. Rates for different denominations, tiers or channels are different series and must never
+    be averaged together.
     """
 
     domain: ClassVar[str] = "fx"
@@ -61,6 +65,7 @@ class FxQuote:
         "quote_currency",
         "unit_amount",
         "denomination",
+        "min_amount",
         "channel",
     )
 
@@ -71,6 +76,7 @@ class FxQuote:
     quote_currency: str
     unit_amount: str
     denomination: str
+    min_amount: str
     channel: str
     buy: str
     sell: str
@@ -88,7 +94,7 @@ class FxQuote:
                 raise RecordError(f"{name} must be an upper-case currency code: {getattr(self, name)!r}")
         if self.method not in METHODS:
             raise RecordError(f"method must be one of {sorted(METHODS)}: {self.method!r}")
-        for name in ("unit_amount", "buy", "sell"):
+        for name in ("unit_amount", "min_amount", "buy", "sell"):
             _check_decimal(name, getattr(self, name))
         if not self.buy and not self.sell:
             raise RecordError("a quote needs a buy or a sell price")

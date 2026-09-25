@@ -31,7 +31,7 @@ class Collector:
 
 
 def registry() -> dict[str, Collector]:
-    from myanmardata.collectors import superrich_1965, superrich_th
+    from myanmardata.collectors import superrich_th
 
-    collectors = [superrich_th.COLLECTOR, superrich_1965.COLLECTOR]
+    collectors = [superrich_th.COLLECTOR]
     return {c.name: c for c in collectors}

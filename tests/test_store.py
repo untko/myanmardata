@@ -21,6 +21,7 @@ def quote(**overrides: str) -> FxQuote:
         "quote_currency": "THB",
         "unit_amount": "1",
         "denomination": "100",
+        "min_amount": "",
         "channel": "cash",
         "buy": "32.45",
         "sell": "32.55",
@@ -48,6 +49,7 @@ def test_utc_iso_requires_aware_datetime():
         {"method": "guess"},
         {"observed_at": "2026-09-25 02:58"},
         {"venue": ""},
+        {"min_amount": "10,000"},
     ],
 )
 def test_invalid_quotes_are_rejected(overrides):
@@ -93,3 +95,20 @@ def test_never_overwrites_a_snapshot(tmp_path):
     store.write("superrich_th", [quote()], COLLECTED)
     with pytest.raises(FileExistsError):
         store.write("superrich_th", [quote(sell="1")], COLLECTED)
+
+
+def test_only_new_keeps_unseen_observations(tmp_path):
+    store = SnapshotStore(tmp_path)
+    store.write("superrich_th", [quote()], COLLECTED, only_new=True)
+
+    later = datetime(2026, 9, 26, 3, 0, 0, tzinfo=UTC)
+    old = quote(collected_at=utc_iso(later))
+    new = quote(collected_at=utc_iso(later), observed_at="2026-09-26T02:58:00Z")
+    result = store.write("superrich_th", [old, new], later, only_new=True)
+    assert result.rows == 1
+    assert result.snapshot is not None
+    with result.snapshot.open(newline="") as handle:
+        assert [r["observed_at"] for r in csv.DictReader(handle)] == ["2026-09-26T02:58:00Z"]
+
+    again = store.write("superrich_th", [old, new], later, only_new=True)
+    assert again.skipped_unchanged and again.rows == 0
