@@ -1,6 +1,8 @@
 """Console script for myanmardata."""
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -22,7 +24,31 @@ console = Console()
 # Channel parsers: name -> (module with SOURCE and parse_posts, default Viber chat name)
 CHANNELS = {"baht_kyat": (baht_kyat, "Baht-Kyat")}
 
-ViberDb = Annotated[Path, typer.Argument(exists=True, dir_okay=False, help="Path to viber.db (copy it first).")]
+
+@contextmanager
+def _explained() -> Iterator[None]:
+    """Show expected problems (missing file, unknown chat, unfamiliar schema) without a traceback."""
+    try:
+        yield
+    except (FileNotFoundError, LookupError, viber_desktop.ViberSchemaError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+
+
+ViberDb = Annotated[
+    Path | None, typer.Argument(dir_okay=False, help="Path to viber.db; found automatically if omitted.")
+]
+
+
+@viber.command("find")
+def viber_find() -> None:
+    """Show where Viber Desktop's database is on this computer."""
+    found = viber_desktop.find_databases()
+    if not found:
+        console.print(f"no viber.db under {', '.join(map(str, viber_desktop.viber_roots()))}")
+        raise typer.Exit(code=1)
+    for path in found:
+        console.print(str(path))
 
 
 @app.command()
@@ -70,17 +96,21 @@ def collect(
 
 
 @viber.command("tables")
-def viber_tables(db: ViberDb) -> None:
+def viber_tables(db: ViberDb = None) -> None:
     """Show every table and its columns (to diagnose an unfamiliar Viber version)."""
-    for name, columns in viber_desktop.tables(db).items():
+    with _explained():
+        found = viber_desktop.tables(viber_desktop.locate(db))
+    for name, columns in found.items():
         console.print(f"[bold]{name}[/bold]: {', '.join(columns)}")
 
 
 @viber.command("chats")
-def viber_chats(db: ViberDb) -> None:
+def viber_chats(db: ViberDb = None) -> None:
     """List chats and channels with their number of text messages."""
     table = Table("chat", "messages")
-    for name, count in viber_desktop.chats(db):
+    with _explained():
+        found = viber_desktop.chats(viber_desktop.locate(db))
+    for name, count in found:
         table.add_row(name, str(count))
     console.print(table)
 
@@ -104,16 +134,19 @@ def import_chat(
     """Import rate posts from a chat channel's history; only observations not yet stored are written."""
     if channel not in CHANNELS:
         raise typer.BadParameter(f"unknown channel {channel!r}", param_hint="CHANNEL")
-    if (viber_db is None) == (text is None):
-        raise typer.BadParameter("give exactly one of --viber-db or --text")
+    if viber_db is not None and text is not None:
+        raise typer.BadParameter("give either --viber-db or --text, not both")
     parser, default_chat = CHANNELS[channel]
 
     posts: list[Post]
-    if viber_db is not None:
-        posts = list(viber_desktop.posts(viber_db, chat or default_chat))
-    else:
-        assert text is not None
-        posts = text_posts.read(text.read_text(encoding="utf-8"), last_year, text_posts.parse_offset(utc_offset))
+    with _explained():
+        if text is not None:
+            offset = text_posts.parse_offset(utc_offset)
+            posts = text_posts.read(text.read_text(encoding="utf-8"), last_year, offset)
+        else:
+            db = viber_desktop.locate(viber_db)
+            console.print(f"reading {db}")
+            posts = list(viber_desktop.posts(db, chat or default_chat))
 
     collected_at = datetime.now(UTC).replace(microsecond=0)
     quotes, report = parser.parse_posts(posts, utc_iso(collected_at))

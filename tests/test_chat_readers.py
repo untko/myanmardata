@@ -9,6 +9,7 @@ from myanmardata.chat import text_posts, viber_desktop
 
 
 def make_viber_db(path, messages):
+    path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(path)
     db.executescript(
         """
@@ -38,6 +39,31 @@ def test_viber_reads_one_chat_oldest_first(tmp_path):
     assert posts[0].record_id == "viber:101"
     assert viber_desktop.chats(db) == [("Baht-Kyat", 2), ("Family", 1)]
     assert "Messages" in viber_desktop.tables(db)
+
+
+def test_viber_sees_posts_still_in_the_wal_journal(tmp_path):
+    """While Viber runs, new posts sit in viber.db-wal; reading a copy must include them."""
+    path = make_viber_db(tmp_path / "viber.db", [(1, 1_790_000_000_000, "old")])
+    live = sqlite3.connect(path)  # stays open, like a running Viber, so nothing is checkpointed
+    live.execute("PRAGMA journal_mode=WAL")
+    live.execute("PRAGMA wal_autocheckpoint=0")
+    live.execute("INSERT INTO Events VALUES (900, 1, 1790000100000, 0)")
+    live.execute("INSERT INTO Messages VALUES (900, 'new', 1)")
+    live.commit()
+    assert (tmp_path / "viber.db-wal").stat().st_size > 0
+
+    assert [p.text for p in viber_desktop.posts(path, "Baht-Kyat")] == ["old", "new"]
+    live.close()
+
+
+def test_find_and_locate(tmp_path):
+    root = tmp_path / "ViberPC"
+    assert viber_desktop.find_databases([root]) == []
+    one = make_viber_db(root / "111" / "viber.db", [])
+    assert viber_desktop.find_databases([root]) == [one]
+    make_viber_db(root / "222" / "viber.db", [])
+    assert len(viber_desktop.find_databases([root])) == 2
+    assert viber_desktop.locate(one) == one
 
 
 def test_viber_unknown_chat_and_schema(tmp_path):

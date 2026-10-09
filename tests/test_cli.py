@@ -105,8 +105,28 @@ def test_import_from_text_dry_run(tmp_path):
     assert not list(tmp_path.rglob("*.csv"))
 
 
-def test_import_needs_exactly_one_input(tmp_path):
+def test_import_finds_viber_db_automatically(tmp_path, monkeypatch):
+    db = make_viber_db(tmp_path / "ViberPC" / "66812345678" / "viber.db", [(1, 1_790_000_000_000, POST)])
+    monkeypatch.setattr("myanmardata.chat.viber_desktop.viber_roots", lambda: [tmp_path / "ViberPC"])
+    result = runner.invoke(app, ["import", "baht_kyat", "--out", str(tmp_path / "data"), "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "1 posts, 1 with rates, 2 quotes" in result.output
+    assert "viber.db" in result.output and db.exists()
+
+
+def test_import_explains_missing_viber_db(tmp_path, monkeypatch):
+    monkeypatch.setattr("myanmardata.chat.viber_desktop.viber_roots", lambda: [tmp_path / "ViberPC"])
     result = runner.invoke(app, ["import", "baht_kyat", "--out", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "no viber.db found" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_import_rejects_two_inputs(tmp_path):
+    pasted = tmp_path / "posts.txt"
+    pasted.write_text(POST, encoding="utf-8")
+    db = make_viber_db(tmp_path / "viber.db", [])
+    result = runner.invoke(app, ["import", "baht_kyat", "--viber-db", str(db), "--text", str(pasted)])
     assert result.exit_code != 0
 
 
@@ -116,3 +136,11 @@ def test_viber_commands(tmp_path):
     assert chats.exit_code == 0 and "Baht-Kyat" in chats.output
     tables = runner.invoke(app, ["viber", "tables", str(db)])
     assert tables.exit_code == 0 and "EventID" in tables.output
+
+
+def test_viber_find(tmp_path, monkeypatch):
+    monkeypatch.setattr("myanmardata.chat.viber_desktop.viber_roots", lambda: [tmp_path / "ViberPC"])
+    assert runner.invoke(app, ["viber", "find"]).exit_code == 1
+    make_viber_db(tmp_path / "ViberPC" / "66812345678" / "viber.db", [])
+    found = runner.invoke(app, ["viber", "find"])
+    assert found.exit_code == 0 and "66812345678" in found.output

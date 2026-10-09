@@ -42,19 +42,18 @@ Local kyat rates are mostly posted in Viber channels, which have no public web v
 channel's history from Viber Desktop's local database:
 
 1. In Viber Desktop, open the channel and scroll up to the oldest post you want; only loaded
-   posts are in the database.
-2. Quit Viber (or copy the file) and locate `viber.db`:
-   Windows `%APPDATA%\ViberPC\<phone>\viber.db`, macOS `~/Library/Application Support/ViberPC/<phone>/viber.db`.
-3. Run:
+   posts are in the database. Viber can stay open.
+2. Run (the database is found automatically and read from a temporary copy):
 
 ```sh
-myanmardata viber chats viber.db                                   # find the channel's name
-myanmardata import baht_kyat --viber-db viber.db --dry-run         # check what parses
-myanmardata import baht_kyat --viber-db viber.db --out data        # write new observations
+myanmardata import baht_kyat --dry-run          # check what parses
+myanmardata import baht_kyat --out data         # write new observations
 ```
 
-Re-running on a newer copy only adds posts not already stored. If `viber chats` fails, run
-`myanmardata viber tables viber.db`: Viber's schema is undocumented and may differ by version.
+Re-running later only adds posts not already stored. `myanmardata viber find` shows which
+database is used (pass `--viber-db PATH` if you have several accounts), and `myanmardata viber
+chats` lists channel names. If those fail, run `myanmardata viber tables`: Viber's schema is
+undocumented and may differ by version.
 
 Without database access, paste posts into a text file and use `--text posts.txt`, either with an
 `@ 2026-09-25 10:11` line (Myanmar time by default) before each post, or relying on each post's
